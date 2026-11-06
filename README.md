@@ -14,7 +14,8 @@ npm ci
 
 Create local configuration without overwriting an existing `.env`:
 
-
+```powershell
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
 Set `PORTAL_PASSWORD` in `.env` using the assignment access details. Set `PORTAL_EMAIL` if you need to override the built-in operator account. Keep credentials in `.env`; do not commit credentials, cookies, signing secrets, or authenticated request captures. `.gitignore` excludes local environment files while allowing `.env.example`.
@@ -83,7 +84,49 @@ Refresh reloads through the backend metadata cache; it does not force an upstrea
 
 The interface uses plain HTML, CSS, JavaScript, and SVG, with responsive styles and reduced-motion handling. Google Fonts are optional, with system fallbacks. Visual browser verification of the latest inline profile/table remains pending.
 
-## Structure
+## Project architecture
+
+```text
+urja-api/
+|-- src/                    Backend API and portal integration
+|   |-- index.js            Express routes, dashboard hosting, Swagger, errors
+|   |-- client.js           Portal login, cookies, Axios requests, export signing
+|   |-- inventory.js        Validated metadata cache (60 seconds), shared fetches
+|   `-- parser.js           Meter/readings normalization, optional HTML adapter
+|-- public/                 Browser dashboard (no frontend build step)
+|   |-- index.html          Inventory, nameplate, location, readings table, dialog
+|   |-- dashboard.js        API calls, selection, filters, charts, CSV export
+|   `-- dashboard.css       Dashboard styling and responsive layouts
+|-- openapi.json            Public API contract (OpenAPI 3.0.3)
+|-- README.md               Setup, architecture, API usage, decisions, limitations
+|-- PROTOCOL.md             Portal endpoints, authentication, signing, data quirks
+|-- REFLECTION.md           Assignment reflection answers
+|-- package.json            Dependencies, runtime requirement, npm commands
+|-- package-lock.json       Locked dependency versions
+|-- .env.example            Configuration template without real credentials
+|-- .env                    Private local configuration; ignored by Git
+|-- .gitignore              Excludes local secrets and generated files
+`-- node_modules/           Installed dependencies; generated and ignored by Git
+```
+
+Requests enter through `src/index.js`. Meter metadata passes through the inventory cache, which uses `client.js` to retrieve a signed export on a cache miss and `parser.js` to normalize it before caching. Readings first check meter existence through inventory, then fetch the selected meter's history through the portal client and normalize the response. The dashboard calls these same local JSON endpoints; portal credentials and cookies stay on the backend.
+
+```text
+Express application (src/index.js)
+|-- Dashboard: / and /docs/
+|   `-- public/ assets --> local JSON API requests
+|-- API documentation: /api-docs/ and /openapi.json
+|-- Health: /health --> process liveness, no portal call
+`-- Data routes: /meters, /meters/:id, /meters/:id/readings,
+    |           /transformers/:id/meters
+    |-- inventory.js --> 60-second normalized metadata cache
+    |   `-- Cache miss --> client.js --> authenticated signed portal export
+    |                     `-- parser.js --> validated, normalized inventory
+    |-- Readings --> client.js --> portal energy endpoint --> parser.js
+    `-- Unmatched transformer code --> client.js --> portal transformer pages
+```
+
+### File responsibilities
 
 | File | Responsibility |
 | --- | --- |
