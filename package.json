@@ -1,0 +1,23 @@
+{
+  "name": "urja-meter-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only REST API over Urja Meter Ops",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "axios": "1.21.0",
+    "cheerio": "1.2.0",
+    "dotenv": "18.0.9",
+    "express": "5.3.0",
+    "swagger-ui-express": "5.0.1",
+    "tough-cookie": "6.0.2"
+  }
+}
