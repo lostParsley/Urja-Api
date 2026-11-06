@@ -1,3 +1,6 @@
+Candidate: Abhash Singh<br>
+Role : SDE1
+
 # Urja Meter API
 
 A local, read-only API client and proxy service for the Urja Meter Ops portal, built for the Flock Energy engineering assignment. It allows external applications to query meter inventory, inspect nameplate and network hierarchy, retrieve historical readings, and look up transformer associations without handling portal authentication directly. A lightweight browser dashboard is included to inspect and visualize the same dataset.
