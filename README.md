@@ -1,90 +1,151 @@
 # Urja Meter API
 
-A local, read-only API over the Urja Meter Ops portal for the Flock Energy engineering assignment. Other programs can search meters, inspect nameplate and network information, retrieve historical readings, and look up transformer membership without managing the portal login. A custom dashboard presents the same data to operations users.
+A local, read-only API client and proxy service for the Urja Meter Ops portal, built for the Flock Energy engineering assignment. It allows external applications to query meter inventory, inspect nameplate and network hierarchy, retrieve historical readings, and look up transformer associations without handling portal authentication directly. A lightweight browser dashboard is included to inspect and visualize the same dataset.
 
-The backend logs in on demand, keeps session cookies in memory, retrieves metadata through a signed bulk export, and normalizes portal fields into JSON responses. It does not modify meter or transformer records.
+The backend logs in on demand, manages session cookies in memory, extracts inventory metadata through a signed bulk export, and normalizes portal responses into consistent JSON. It performs no write operations against upstream meter or transformer records.
+![alt text](image.png)
 
-## Install and run
+## Getting Started
 
-Use Node.js 24 or later, as declared in `package.json`, and npm. From this directory:
+### Prerequisites
+
+- Node.js 24 or later (as defined in `package.json`)
+- npm
+
+### Installation
+
+Install dependencies from the project root:
 
 ```sh
 npm ci
 ```
 
-Create local configuration without overwriting an existing `.env`:
+### Configuration
 
-```powershell
-if (!(Test-Path .env)) { Copy-Item .env.example .env }
+Create a `.env` file in the root directory (based on `.env.example`):
+
+```sh
+PORTAL_PASSWORD=your_assigned_password
+PORTAL_EMAIL=operator@example.com  # Optional: defaults to built-in operator account
+PORT=3000                          # Optional: default 3000
+HOST=127.0.0.1                     # Optional: default 127.0.0.1
 ```
 
-Set `PORTAL_PASSWORD` in `.env` using the assignment access details. Set `PORTAL_EMAIL` if you need to override the built-in operator account. Keep credentials in `.env`; do not commit credentials, cookies, signing secrets, or authenticated request captures. `.gitignore` excludes local environment files while allowing `.env.example`.
+| Variable | Description |
+| --- | --- |
+| `PORTAL_PASSWORD` | Required. Access password for the upstream portal. |
+| `PORTAL_EMAIL` | Optional. Overrides the built-in operator account email. |
+| `PORT` | Optional. Local listen port (default: `3000`). |
+| `HOST` | Optional. Network interface bind address (default: `127.0.0.1`). |
+
+> Keep credentials in `.env`. Do not commit credentials, cookies, signing keys, or raw authenticated HTTP traces. The repository `.gitignore` excludes local environment files while tracking `.env.example`.
+
+Upstream base URLs and the 15-second per-request HTTP timeout are configured in `src/index.js`. Because operations such as login, key derivation, and token renewal may require multiple HTTP calls, this timeout applies per individual upstream request rather than as an end-to-end route deadline. Upstream proxy settings depend on the host runtime and are not managed by the application.
+
+### Running the Service
+
+Start the production server:
 
 ```sh
 npm start
 ```
 
-| Setting | Behavior |
-| --- | --- |
-| `PORTAL_PASSWORD` | Required at startup. |
-| `PORTAL_EMAIL` | Optional override for the portal account. |
-| `PORT` | Local port, default `3000`. |
-| `HOST` | Bind address, default `127.0.0.1`. |
-
-The upstream portal address and 15-second timeout per upstream request are set in `src/index.js`. Login, signing, and renewal can involve several upstream requests, so this is not an overall route deadline. Proxy configuration depends on the runtime/environment and is not managed by the application.
-
-Open these addresses after startup:
-
-- Dashboard: [http://127.0.0.1:3000/docs/](http://127.0.0.1:3000/docs/) (also available at `/`).
-- Swagger UI: [http://127.0.0.1:3000/api-docs/](http://127.0.0.1:3000/api-docs/).
-- Specification: [http://127.0.0.1:3000/openapi.json](http://127.0.0.1:3000/openapi.json).
-
-Use `npm run dev` for Node's watch mode. No frontend build or database is required.
-
-## API
-
-| Request | Response |
-| --- | --- |
-| `GET /health` | Process liveness: `{"status":"ok"}`. Does not contact the portal. |
-| `GET /meters?q=SE33962&page=1&limit=20` | Case-insensitive partial search by meter ID or serial, with pagination. |
-| `GET /meters/J100000` | Nameplate fields, transformer code, hierarchy, and coordinates. |
-| `GET /meters/J100000/readings` | Timestamped kWh, kVAh, and R-phase voltage in the default portal history window. |
-| `GET /transformers/DT-007/meters?page=1&limit=20` | Paginated meters attached to a transformer code. |
-
-For example, use `curl` (or `curl.exe` in Windows PowerShell):
+For development with Node's native watch mode:
 
 ```sh
+npm run dev
+```
+
+No build step or external database is required.
+
+### Endpoints and Interfaces
+
+Once started, the following interfaces are available:
+
+- **Dashboard:** [http://127.0.0.1:3000/docs/](http://127.0.0.1:3000/docs/) (also served at `/`)
+- **Swagger UI:** [http://127.0.0.1:3000/api-docs/](http://127.0.0.1:3000/api-docs/)
+- **OpenAPI Schema:** [http://127.0.0.1:3000/openapi.json](http://127.0.0.1:3000/openapi.json)
+
+## API Reference
+
+### Routes
+
+| Method & Route | Description |
+| --- | --- |
+| `GET /health` | Process liveness probe: returns `{"status":"ok"}`. Does not query the upstream portal. |
+| `GET /meters?q={search}&page={page}&limit={limit}` | Case-insensitive partial search by meter ID or serial, with pagination. |
+| `GET /meters/{id}` | Meter details: nameplate specifications, transformer assignment, network hierarchy, and coordinates. |
+| `GET /meters/{id}/readings` | Time-series readings (kWh, kVAh, and R-phase voltage) over the portal's default history window. |
+| `GET /transformers/{id}/meters?page={page}&limit={limit}` | Paginated list of meters mapped to a specific transformer code. |
+
+### Example Queries
+
+```sh
+# Search meters by partial ID or serial number
 curl "http://127.0.0.1:3000/meters?q=SE33962&page=1&limit=20"
+
+# Fetch a single meter's profile
 curl "http://127.0.0.1:3000/meters/J100000"
+
+# Fetch historical readings for a meter
 curl "http://127.0.0.1:3000/meters/J100000/readings"
+
+# List meters connected to a specific transformer
 curl "http://127.0.0.1:3000/transformers/DT-007/meters"
 ```
 
-List responses contain `data`, `total`, `page`, and `limit`. Defaults are page 1 and limit 20; the maximum limit is 100. An empty search result returns an empty list. An unknown meter or transformer returns 404. A transformer confirmed to exist but with no attached meters returns an empty list.
+*(Note: On Windows PowerShell, invoke `curl.exe` instead of the `curl` alias).*
 
-Readings responses contain `meter_id` and `data`. Missing numeric measurements become `null`. Energy values are cumulative registers as supplied, not calculated interval consumption. Timestamps retain their portal representation because the timezone is unverified.
+### Data and Pagination Conventions
 
-Errors have a consistent shape:
+- **List Endpoints:** Paginated responses return an object with `data`, `total`, `page`, and `limit`.
+  - Defaults: `page=1`, `limit=20`.
+  - Maximum limit: `100`.
+  - An empty search match returns an empty `data` list (`[]`).
+  - An unknown meter or transformer returns `404 Not Found`.
+  - A confirmed transformer with no associated meters returns an empty `data` list with `total: 0`.
+- **Readings Endpoints:** Returns `meter_id` alongside a `data` array.
+  - Missing numeric measurements are parsed as `null`.
+  - Energy readings reflect raw cumulative register readings as reported by the hardware, not calculated interval delta consumption.
+  - Timestamps preserve original upstream portal strings because the source timezone is unverified.
+
+### Error Handling
+
+All error responses share a standard JSON payload:
 
 ```json
-{"error":{"code":"PORTAL_TIMEOUT","message":"The portal request timed out."}}
+{
+  "error": {
+    "code": "PORTAL_TIMEOUT",
+    "message": "The portal request timed out."
+  }
+}
 ```
 
-Invalid query values return 400 when validated; missing resources return 404. Portal authentication, format, connection, and server failures generally return 502; rate limiting returns 503; upstream request timeouts return 504. Unexpected application failures return a generic 500. Raw Axios errors are not exposed because they can contain sensitive request data. See [openapi.json](openapi.json) for response schemas.
+HTTP status codes map to specific failure modes:
+- `400 Bad Request`: Query parameter validation failure.
+- `404 Not Found`: Requested meter or transformer does not exist.
+- `500 Internal Server Error`: Unhandled application exception.
+- `502 Bad Gateway`: Upstream portal authentication failure, payload format error, connection drop, or portal server error.
+- `503 Service Unavailable`: Upstream portal rate limiting.
+- `504 Gateway Timeout`: Upstream request exceeded the 15-second deadline.
+
+Raw Axios exceptions are intercepted and sanitized before returning to callers to prevent exposing internal session cookies or upstream tokens. Complete schemas are defined in [openapi.json](openapi.json).
 
 ## Dashboard
 
-The dashboard loads all inventory pages, then applies meter/serial search, status filters, transformer filters, and pagination locally. Fleet cards describe the complete loaded inventory. Filters affect the table and CSV export. Transformer counts include distinct codes attached to meters, not empty transformers.
+The browser interface is built with standard HTML5, CSS, vanilla JavaScript, and inline SVG, without requiring a build step or external UI framework.
 
-Click a meter ID to select it and scroll to its profile. Nameplate, coordinates, and network hierarchy display immediately from loaded inventory. Historical readings are fetched separately and shown in a scrollable table with timestamp, kWh, kVAh, and V(R). The chart supports kWh, kVAh, and voltage. Missing numeric values break chart segments rather than being interpolated. The arrow and View meter details button also open a profile dialog with a JSON link.
+- **Client-Side Filtering:** The dashboard fetches the complete normalized inventory on initial load. Search (by meter ID or serial), status filters, and transformer code filters run in-memory against this dataset.
+- **Summary Cards & Exports:** Fleet metric cards reflect the full loaded inventory. Active filters apply directly to both the displayed table and CSV exports. Transformer counts reflect distinct codes assigned to active meters (unassigned/empty transformers are not counted).
+- **Profile & Time Series:** Clicking a meter ID displays its nameplate data, coordinates, and hierarchy directly from the loaded inventory. Historical readings are retrieved on demand, rendered in a scrollable table (timestamp, kWh, kVAh, V_R), and plotted on an SVG chart. Missing numerical values create broken line segments rather than false zero interpolations. The arrow control and "View meter details" button open a modal dialog containing a direct link to the JSON payload.
+- **Request Lifecycle:** Selecting a different meter immediately cancels any in-flight readings request via `AbortController` and discards late responses. Readings views handle loading, empty, and error states; re-selecting the meter triggers a fresh request. Meter metadata remains accessible even if reading calls fail. (Browser-side cancellation drops local processing, though upstream HTTP requests may still run to completion).
+- **Refresh Semantics:** The dashboard "Refresh" button re-queries the local API metadata cache (it does not bypass the backend's 60-second cache window). "Inventory time" indicates when the browser retrieved the data, not upstream portal generation time. If a refresh fails, the existing inventory remains rendered alongside an error notification. The header health indicator polls only local process liveness (`/health`).
+- **Styling:** Includes responsive mobile layouts, system font fallbacks if Google Fonts cannot load, and `@media (prefers-reduced-motion)` support.
 
-Switching meters aborts the previous browser request and ignores responses from older selections. Readings have loading, empty, and error states; selecting the meter again retries. Profiles remain available when readings fail. Browser cancellation does not guarantee that upstream server work stops.
+## Architecture and Design
 
-Refresh reloads through the backend metadata cache; it does not force an upstream refresh. Inventory time reports browser retrieval time, not portal freshness. If refresh fails, previously fetched inventory can remain visible with an error banner. The health indicator checks only the API process.
-
-The interface uses plain HTML, CSS, JavaScript, and SVG, with responsive styles and reduced-motion handling. Google Fonts are optional, with system fallbacks. Visual browser verification of the latest inline profile/table remains pending.
-
-## Project architecture
+### Directory Structure
 
 ```text
 urja-api/
@@ -109,7 +170,7 @@ urja-api/
 `-- node_modules/           Installed dependencies; generated and ignored by Git
 ```
 
-Requests enter through `src/index.js`. Meter metadata passes through the inventory cache, which uses `client.js` to retrieve a signed export on a cache miss and `parser.js` to normalize it before caching. Readings first check meter existence through inventory, then fetch the selected meter's history through the portal client and normalize the response. The dashboard calls these same local JSON endpoints; portal credentials and cookies stay on the backend.
+### Request Flow
 
 ```text
 Express application (src/index.js)
@@ -126,58 +187,67 @@ Express application (src/index.js)
     `-- Unmatched transformer code --> client.js --> portal transformer pages
 ```
 
-### File responsibilities
+Incoming requests hit `src/index.js`. Meter metadata queries route through the in-memory cache in `inventory.js`. On a cache miss, `client.js` authenticates with the portal, signs a bulk export request, and passes the payload to `parser.js` for validation and schema normalization before caching.
 
-| File | Responsibility |
+Readings requests first verify the meter exists in inventory, call the portal's energy history endpoint via `client.js`, and normalize the data via `parser.js`. The dashboard consumes these local endpoints; portal credentials and session cookies never leave the Node process.
+
+### Module Responsibilities
+
+| File | Primary Responsibility |
 | --- | --- |
-| `src/client.js` | Axios requests, scoped cookies, shared login, renewal, signed exports, and safe errors. |
-| `src/inventory.js` | Validated metadata cache and shared in-flight retrieval. |
-| `src/parser.js` | Normalized fields and an optional Cheerio HTML adapter. |
-| `src/index.js` | Express routes, pagination, resource lookup, dashboard hosting, and Swagger UI. |
-| `public/index.html` | Dashboard structure, inline profile, readings table, and detail dialog. |
-| `public/dashboard.js` | Inventory loading, filtering, selection, charts, and CSV export. |
-| `public/dashboard.css` | Styling and responsive layouts. |
-| `test/session.test.js` | Fixture tests for authentication, failures, timeouts, and export renewal. |
-| `test/inventory.test.js` | Concurrency, cache expiry, invalid exports, and retry after failure. |
-| `test/dashboard.test.js` | Simulated-document selection and stale-response test. |
+| `src/client.js` | Axios client management, cookie jar persistence, shared login flows, session renewal, signed export retrieval, and error sanitization. |
+| `src/inventory.js` | In-memory cache (60s TTL), cache validation, and coalescing concurrent in-flight fetches. |
+| `src/parser.js` | Data normalization for meter and reading models; optional Cheerio HTML adapter. |
+| `src/index.js` | Express server setup, route handlers, pagination logic, dashboard static hosting, and OpenAPI / Swagger routes. |
+| `public/index.html` | Dashboard layout, inline profile cards, readings table, and detail modal. |
+| `public/dashboard.js` | Client-side inventory fetching, filtering, meter selection, SVG chart rendering, and CSV exports. |
+| `public/dashboard.css` | CSS styling, grid layouts, and responsive breakpoints. |
+| `test/session.test.js` | Test fixtures for portal authentication, failure states, network timeouts, and export renewal. |
+| `test/inventory.test.js` | Unit tests for concurrency handling, cache expiration, malformed exports, and retry behavior. |
+| `test/dashboard.test.js` | DOM tests for meter selection and stale response suppression. |
 
-The main extraction path uses JSON. Cheerio's `parseHtmlRows` is an unused optional adapter; implemented routes need no HTML selectors. The portal search helper is tested, but public meter search filters the normalized export locally.
+*Note on HTML parsing:* The primary data extraction pathway uses JSON. The Cheerio parser (`parseHtmlRows`) is retained as an optional fallback adapter; current routes do not depend on HTML scraping. While portal search utilities exist in `src/client.js`, public meter searches filter the normalized in-memory export directly.
 
-## Assumptions and design decisions
+## Design Decisions and Assumptions
 
-- The export contains the full inventory in one response. Its total must match the row count, records must pass normalization, and meter IDs must be unique before caching.
-- Export metadata provides a common representation across meter builds. Per-meter readings are fetched separately rather than loading every history upfront.
-- Transformer membership uses exact codes. Per-record hierarchy names and aliases are preserved; blank hierarchy names/codes become `null`.
-- Timestamps and energy registers are preserved without inferring timezone, reset behavior, or interval usage.
-- Cookie and cache state are process-local. Login attempts are shared; ordinary GETs can retry once after session rejection. Signed exports are rebuilt with a fresh key after rejection.
-- Loopback binding suits local evaluation. The local API has no caller authentication; exposing it elsewhere needs an appropriate access policy.
+- **Bulk Export Invariant:** The portal export returns the complete meter population in a single payload. Before the cache accepts an export, the returned total must match the record count, records must pass schema validation, and meter IDs must be unique.
+- **Separation of Metadata and Telemetry:** Metadata is normalized into a shared representation across meter models. Reading histories are retrieved on demand per meter rather than eagerly bulk-loading time-series data for the entire fleet.
+- **Transformer Mapping:** Transformer associations require exact code matches. Regional hierarchy names and aliases are preserved as reported; empty or whitespace-only values normalize to `null`.
+- **Telemetry Fidelity:** Upstream timestamps and cumulative energy counters are preserved verbatim without heuristic timezone adjustment, consumption derivation, or reset detection.
+- **Process-Local State:** Cookie jars and cache entries are maintained in memory. Concurrent login calls share a single promise to prevent duplicate upstream handshakes. Standard GET requests retry once on session expiration. Rejected export signatures trigger fresh key generation and a single retry.
+- **Network Scope:** Binds to `127.0.0.1` by default for local execution. The API does not implement client authentication; production network deployment would require an external gateway or authentication middleware.
 
-## Caching and latency trade offs
+## Caching and Concurrency
 
-Validated metadata is cached for 60 seconds after successful retrieval and normalization. Concurrent cache misses share one retrieval and validation. Failures are not cached. An expired refresh failure returns an error rather than serving expired backend data. There is no background refresh or force-refresh route.
+- **Metadata Cache (60s TTL):** Normalized inventory is cached in memory for 60 seconds following a successful fetch.
+- **Request Coalescing:** Multiple concurrent requests during a cache miss share a single in-flight export call to prevent portal load spikes.
+- **No Negative Caching:** Upstream fetch or validation failures are not cached.
+- **Fail-Fast on Expiry:** If a refresh attempt fails after cache expiration, the service returns an error immediately rather than serving stale data. There is no automated background poll or manual cache-purge route.
+- **Readings Bypass Cache:** Telemetry readings are fetched directly on each user request to reflect current portal data.
 
-This reduces repeated exports during pagination and selection at the cost of up to 60 seconds of metadata staleness relative to retrieval. Readings are fetched on each selection and are not cached by this service. Browser profiles use loaded inventory, which can remain displayed until refresh.
+This strategy prevents redundant bulk exports during frequent UI navigation and pagination, trading off up to 60 seconds of metadata latency.
 
-The earlier flow requested details already loaded in the browser and repeatedly exported metadata. Reuse and shared retrieval remove redundant work. They do not establish the exact cause of the reported 504 or eliminate portal timeouts.
+## Limitations and Future Considerations
 
+### Current Non-Goals
 
+- **External Persistence & Distributed Caching:** Unnecessary for single-instance local execution with the current inventory size.
+- **Telemetry Transformations:** Configurable date ranges, computed interval delta consumption, register turnover detection, geospatial queries, and network topology graphs were omitted pending specific operational requirements.
+- **Public Ingress Security:** Transport-level authentication, rate limiting for downstream consumers, and deployment manifests are outside the scope of this local assignment.
 
-## Intentionally left out
+### Production Roadmap
 
-Database persistence and distributed caching are unnecessary for the current small, local inventory. Custom history windows, calculated consumption, register-reset detection, spatial queries, and a reconstructed network graph need further investigation or requirements. Public-service authentication and deployment infrastructure are outside the local submission scope.
+- **Testing Coverage:** Add end-to-end HTTP integration tests and automated browser interaction tests (selection, pagination, search, responsive breakpoints).
+- **Protocol Verification:** Further inspect session idle timeouts, signing key rotation policies, portal rate limits, and valid reading query ranges.
+- **Schema Validation:** Implement automated runtime validation of parsed fields against `openapi.json` schemas.
+- **Distributed Scaling:** For multi-instance deployments:
+  - Move metadata caching to Redis with a 60-second TTL.
+  - Implement distributed locks (e.g., Redlock) to coalesce concurrent cache misses across instances without duplicate exports.
+  - Define explicit fallback behavior for Redis connectivity failures.
+- **Large Dataset Handling:** If inventory expands beyond what fits comfortably in memory, transition from full-table scanning to a persistent indexed datastore with database-level pagination and filtering, and update the frontend to fetch paginated subsets on demand.
 
-## With more time
+## Supporting Documentation
 
-Add HTTP route tests and browser checks for clicks, scrolling, filters, failures, and mobile layouts. Confirm session lifetime, signing-key rotation, rate limits, timestamp ordering/timezone, and supported reading windows. Measure cold and warm latency before changing timeout/cache policies. Validate normalized fields against OpenAPI schemas.
-
-If the service runs across multiple instances, use Redis for a shared metadata cache with a 60-second TTL. This would let instances reuse cached inventory instead of each maintaining a separate copy. Add coordination for concurrent cache misses to avoid duplicate portal exports, and define behavior when Redis is unavailable.
-
-Filtering currently scans an in-memory inventory, and the dashboard downloads every page. Much larger datasets would need a persistent indexed query layer, bounded server-side filtering, and a different frontend loading strategy. A paginated export would require replacing the full-response assumption.
-
-## Supporting notes and submission
-
-- [PROTOCOL.md](PROTOCOL.md): portal authentication, endpoints, signing, normalization, observations, and unresolved questions.
-- [REFLECTION.md](REFLECTION.md): the five reflection answers, marked for personal review.
-- [openapi.json](openapi.json): OpenAPI 3.0.3 description of this API.
-
-Development and review were AI-assisted. Verify your own DevTools findings and personalize the reflection so the submission represents your investigation accurately. Public GitHub publication and the email handoff are separate submission steps; this documentation does not claim they have happened.
+- [PROTOCOL.md](PROTOCOL.md): Details upstream portal authentication flows, undocumented endpoints, signing mechanisms, data normalization rules, and observed quirks.
+- [REFLECTION.md](REFLECTION.md): Engineering reflection responses regarding design tradeoffs and implementation choices.
+- [openapi.json](openapi.json): Full OpenAPI 3.0.3 specification covering endpoints, request parameters, and response schemas.
