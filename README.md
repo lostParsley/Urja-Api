@@ -170,6 +170,8 @@ Database persistence and distributed caching are unnecessary for the current sma
 
 Add HTTP route tests and browser checks for clicks, scrolling, filters, failures, and mobile layouts. Confirm session lifetime, signing-key rotation, rate limits, timestamp ordering/timezone, and supported reading windows. Measure cold and warm latency before changing timeout/cache policies. Validate normalized fields against OpenAPI schemas.
 
+If the service runs across multiple instances, use Redis for a shared metadata cache with a 60-second TTL. This would let instances reuse cached inventory instead of each maintaining a separate copy. Add coordination for concurrent cache misses to avoid duplicate portal exports, and define behavior when Redis is unavailable.
+
 Filtering currently scans an in-memory inventory, and the dashboard downloads every page. Much larger datasets would need a persistent indexed query layer, bounded server-side filtering, and a different frontend loading strategy. A paginated export would require replacing the full-response assumption.
 
 ## Supporting notes and submission
