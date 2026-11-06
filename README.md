@@ -3,7 +3,8 @@
 A local, read-only API client and proxy service for the Urja Meter Ops portal, built for the Flock Energy engineering assignment. It allows external applications to query meter inventory, inspect nameplate and network hierarchy, retrieve historical readings, and look up transformer associations without handling portal authentication directly. A lightweight browser dashboard is included to inspect and visualize the same dataset.
 
 The backend logs in on demand, manages session cookies in memory, extracts inventory metadata through a signed bulk export, and normalizes portal responses into consistent JSON. It performs no write operations against upstream meter or transformer records.
-![alt text](image.png)
+
+![Urja dashboard showing inventory totals, meter nameplate, and location](image.png)
 
 ## Getting Started
 
